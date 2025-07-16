@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-frontend
+  labels:
+    app: ecommerce-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ecommerce-frontend
+  template:
+    metadata:
+      labels:
+        app: ecommerce-frontend
+    spec:
+      initContainers:
+        - name: clone-and-build
+          image: node:20-alpine
+          command:
+            - sh
+            - -c
+            - |
+              apk add --no-cache git && \
+              rm -rf /workspace/* /workspace/.* 2>/dev/null || true && \
+              git clone https://github.com/sajidul-jami/ai_ecommerce_user_frontend.git /workspace && \
+              cd /workspace && \
+              echo "NEXT_PUBLIC_API_BASE_URL=http://192.168.1.22:30007/api" > .env.local && \
+              npm install && \
+              npm run build
+          volumeMounts:
+            - name: frontend-src
+              mountPath: /workspace
+
+      containers:
+        - name: frontend
+          image: node:20-alpine
+          workingDir: /workspace
+          command: ["npm", "start"]
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: frontend-src
+              mountPath: /workspace
+
+      volumes:
+        - name: frontend-src
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-frontend
+spec:
+  type: NodePort
+  selector:
+    app: ecommerce-frontend
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+      nodePort: 30008
