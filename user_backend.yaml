@@ -1,0 +1,76 @@
+# ------------------------------
+# Secrets (reuse existing ones)
+# ------------------------------
+apiVersion: v1
+kind: Secret
+metadata:
+  name: backend-secret
+type: Opaque
+data:
+  jwt-secret: U3VwZXJKd3RTZWNyZXQ=   # SuperJwtSecret  (base64)
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ecommerce-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ecommerce-backend
+  template:
+    metadata:
+      labels:
+        app: ecommerce-backend
+    spec:
+      containers:
+      - name: node
+        image: node:20-alpine
+        workingDir: /app
+        env:
+        # ----------  DB connection over NodePort ----------
+        - name: DB_HOST          # Node IP hosting the MySQL NodePort
+          value: "192.168.1.22"
+        - name: DB_PORT
+          value: "30006"
+        - name: DB_NAME
+          value: ai_ecommerce
+        - name: DB_USER
+          value: root
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: root-password
+        # ----------  JWT secret ----------
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: jwt-secret
+        ports:
+        - containerPort: 3000
+        command:
+        - /bin/sh
+        - -c
+        - |
+          apk add --no-cache git &&
+          git clone --depth 1 https://github.com/sajidul-jami/ai_ecommerce_user_backend.git . &&
+          npm install &&
+          npm run start
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ecommerce-backend
+spec:
+  type: NodePort          # External access on <NODE_IP>:30007
+  selector:
+    app: ecommerce-backend
+  ports:
+  - port: 3000
+    targetPort: 3000
+    nodePort: 30007        # Feel free to change or remove for auto‑assignment
